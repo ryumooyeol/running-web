@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <title>러닝 웹</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- Leaflet 지도 CSS -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#ff7a00">
+
+  <!-- Leaflet 지도 -->
   <link
     rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
   />
 
   <link rel="stylesheet" href="css/style.css" />
@@ -18,13 +20,20 @@
   <div class="container">
     <h1>🏃 러닝 웹</h1>
 
-    <div id="timeDisplay">⏱ 00:00.00</div>
-    <div id="distanceDisplay">📍 거리: 0.00 km</div>
+    <div id="time">00:00.00</div>
+    <div id="distance">0.00 km</div>
+    <div id="pace">--'-- /km</div>
 
-    <button id="toggleBtn">🚀 러닝 시작</button>
-    <button id="stopBtn">⏹ 러닝 종료</button>
+    <button id="startBtn">러닝 시작</button>
+    <button id="stopBtn">러닝 종료</button>
 
     <div id="map"></div>
+
+    <h3>📍 랩 기록</h3>
+    <ul id="laps"></ul>
   </div>
 
-  <!-- Leaflet JS -
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="js/script.js"></script>
+</body>
+</html>

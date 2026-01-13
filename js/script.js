@@ -1,131 +1,104 @@
-const toggleBtn = document.getElementById("toggleBtn");
-const stopBtn = document.getElementById("stopBtn");
-const timeDisplay = document.getElementById("timeDisplay");
-const distanceDisplay = document.getElementById("distanceDisplay");
-
-let isRunning = false;
+let running = false;
 let startTime = 0;
-let elapsedTime = 0;
-let timerInterval = null;
+let timer = null;
+let elapsed = 0;
 
-// GPS
 let watchId = null;
-let lastLatLng = null;
-let totalDistance = 0;
+let lastPos = null;
+let distance = 0;
+let lapDistance = 0;
+let lapCount = 1;
 
-// 지도
-let map = null;
-let polyline = null;
+const timeEl = document.getElementById("time");
+const distEl = document.getElementById("distance");
+const paceEl = document.getElementById("pace");
+const lapsEl = document.getElementById("laps");
+const startBtn = document.getElementById("startBtn");
 
-// 거리 계산 (km)
-function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+const map = L.map("map").setView([37.5665, 126.9780], 15);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+const path = L.polyline([], { color: "red" }).addTo(map);
+
+function formatTime(ms) {
+  const s = ms / 1000;
+  const m = Math.floor(s / 60);
+  const r = (s % 60).toFixed(2);
+  return `${String(m).padStart(2, "0")}:${String(r).padStart(5, "0")}`;
+}
+
+function getDistance(p1, p2) {
+  const R = 6371e3;
+  const lat1 = p1.lat * Math.PI / 180;
+  const lat2 = p2.lat * Math.PI / 180;
+  const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+  const dLon = (p2.lng - p1.lng) * Math.PI / 180;
 
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
+    Math.cos(lat1) * Math.cos(lat2) *
+    Math.sin(dLon / 2) ** 2;
 
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// 시간 포맷
-function formatTime(ms) {
-  const sec = ms / 1000;
-  const min = Math.floor(sec / 60);
-  const remain = (sec % 60).toFixed(2);
+document.getElementById("startBtn").onclick = () => {
+  if (!running) {
+    running = true;
+    startBtn.innerText = "일시정지";
+    startTime = Date.now() - elapsed;
 
-  return `${String(min).padStart(2, "0")}:${String(remain).padStart(5, "0")}`;
-}
+    timer = setInterval(() => {
+      elapsed = Date.now() - startTime;
+      timeEl.innerText = formatTime(elapsed);
 
-// 시작 / 일시정지
-toggleBtn.addEventListener("click", () => {
-  if (!isRunning) {
-    isRunning = true;
-    toggleBtn.innerText = "⏸ 일시정지";
+      if (distance > 0) {
+        const pace = elapsed / distance / 60;
+        paceEl.innerText =
+          `${Math.floor(pace)}'${Math.floor((pace % 1) * 60)} /km`;
+      }
+    }, 100);
 
-    startTime = Date.now() - elapsedTime;
-    timerInterval = setInterval(() => {
-      elapsedTime = Date.now() - startTime;
-      timeDisplay.innerText = "⏱ " + formatTime(elapsedTime);
-    }, 10);
+    watchId = navigator.geolocation.watchPosition(pos => {
+      const current = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude
+      };
 
-    startGPS();
+      if (lastPos) {
+        const d = getDistance(lastPos, current);
+        distance += d;
+        lapDistance += d;
+
+        if (lapDistance >= 1000) {
+          const lapTime = elapsed / lapCount;
+          const pace = lapTime / 60000;
+          const li = document.createElement("li");
+          li.innerText = `Lap ${lapCount} - ${pace.toFixed(2)} min/km`;
+          lapsEl.appendChild(li);
+          lapCount++;
+          lapDistance = 0;
+        }
+      }
+
+      lastPos = current;
+      path.addLatLng(current);
+      map.panTo(current);
+
+      distEl.innerText = (distance / 1000).toFixed(2) + " km";
+    });
   } else {
-    isRunning = false;
-    toggleBtn.innerText = "🚀 러닝 시작";
-    clearInterval(timerInterval);
-    stopGPS();
-  }
-});
-
-// 러닝 종료
-stopBtn.addEventListener("click", () => {
-  clearInterval(timerInterval);
-  stopGPS();
-
-  isRunning = false;
-  elapsedTime = 0;
-  totalDistance = 0;
-  lastLatLng = null;
-
-  timeDisplay.innerText = "⏱ 00:00.00";
-  distanceDisplay.innerText = "📍 거리: 0.00 km";
-  toggleBtn.innerText = "🚀 러닝 시작";
-
-  if (polyline) polyline.setLatLngs([]);
-});
-
-// GPS 시작
-function startGPS() {
-  if (!navigator.geolocation) {
-    alert("GPS를 지원하지 않습니다.");
-    return;
-  }
-
-  watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const current = [lat, lng];
-
-      if (!map) {
-        map = L.map("map").setView(current, 16);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "© OpenStreetMap",
-        }).addTo(map);
-
-        polyline = L.polyline([], { color: "red" }).addTo(map);
-      }
-
-      polyline.addLatLng(current);
-      map.setView(current);
-
-      if (lastLatLng) {
-        totalDistance += getDistance(
-          lastLatLng[0],
-          lastLatLng[1],
-          lat,
-          lng
-        );
-        distanceDisplay.innerText =
-          "📍 거리: " + totalDistance.toFixed(2) + " km";
-      }
-
-      lastLatLng = current;
-    },
-    (err) => alert("GPS 오류: " + err.message),
-    { enableHighAccuracy: true }
-  );
-}
-
-// GPS 종료
-function stopGPS() {
-  if (watchId !== null) {
+    running = false;
+    startBtn.innerText = "러닝 시작";
+    clearInterval(timer);
     navigator.geolocation.clearWatch(watchId);
-    watchId = null;
   }
-}
+};
+
+document.getElementById("stopBtn").onclick = () => {
+  localStorage.setItem("lastRun", JSON.stringify({
+    time: elapsed,
+    distance: distance
+  }));
+
+  location.reload();
+};
